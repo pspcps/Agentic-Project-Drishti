@@ -3,6 +3,7 @@ import { Box, Button, TextField, Typography, Paper, IconButton, InputAdornment, 
 import { Visibility, VisibilityOff } from '@mui/icons-material';
 import logo from '../assets/ChatGPT_Image.png';
 import { useNavigate } from 'react-router-dom';
+import { BASE_URL } from '../services/adkApi';
 
 export default function Login() {
   const [userId, setUserId] = useState('');
@@ -17,7 +18,7 @@ export default function Login() {
     setError('');
     setLoading(true);
     try {
-      const response = await fetch('https://gcp-crowd-agents-268678901849.us-central1.run.app/api/login', {
+      const response = await fetch(`${BASE_URL}/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userid: userId, password }),

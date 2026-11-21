@@ -9,10 +9,10 @@ class PubSubComms:
         self.topic_path = self.publisher.topic_path(GCP_PROJECT, f"{PUBSUB_TOPIC_PREFIX}{agent_name}")
         self.subscription_path = self.subscriber.subscription_path(GCP_PROJECT, f"{PUBSUB_TOPIC_PREFIX}{agent_name}_sub")
 
-    def publish(self, message: dict):
+    def publish(self, message: dict, timeout=None):
         data = json.dumps(message).encode("utf-8")
         future = self.publisher.publish(self.topic_path, data)
-        return future.result()
+        return future.result(timeout=timeout)
 
     def subscribe(self, callback):
         import logging

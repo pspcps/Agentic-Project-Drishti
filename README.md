@@ -1,323 +1,106 @@
-# Project Drishti - AI-Powered Crowd Safety & Event Management System
+# Project Drishti
 
-A comprehensive, full-stack application that leverages AI agents for real-time crowd safety monitoring, incident management, and event coordination. Built with modern web technologies and Google Cloud Platform services.
+Project Drishti helps venue control-room operators and event safety leads review a still image when they need a quick read on crowding or a possible hazard. Choose a venue zone and upload one JPEG or PNG. Gemini estimates the visible people and apparent density, flags signs such as smoke, fire, possible crowd crush or medical distress, and suggests what to verify. An operator makes the response decision.
 
-## 🚀 Features
+Input is one complete, nonempty still JPEG or PNG, up to 5 MiB and 20 megapixels. The zone is required. Notes are optional and stored as upload metadata. The vision prompt uses image evidence.
 
-### AI-Powered Agents
-- **Situational Summary Agent**: Real-time analysis and summarization of crowd situations
-- **Emergency Escalation Agent**: Intelligent incident escalation and priority management
-- **Crowd Notification Agent**: Automated alert systems for safety personnel
-- **Response Dispatcher Agent**: Smart resource allocation and responder coordination
-- **Chat Agent**: Interactive AI assistant for incident management
-- **Incident Agent**: Specialized incident analysis and response coordination
+![Drishti upload page showing the detected result for a synthetic fire image](docs/analysis-screenshot.jpg)
 
-### Frontend Dashboard
-- **Real-time Monitoring**: Live incident tracking and crowd analytics
-- **Interactive Maps**: Google Maps integration with incident markers and zone management
-- **Incident Management**: Comprehensive incident lifecycle management
-- **Analytics & Reports**: Data visualization and historical analysis
-- **Venue Management**: Multi-venue support with custom configurations
-- **Mobile-Responsive**: Optimized for desktop and mobile devices
+[Watch the 12-second demonstration](docs/analysis-demo.webp). The upload page shows a potential fire, a clear negative, an obscured scene requiring manual review, and a simulated Gemini timeout. The demonstration uses the real UI and analysis route with scripted model responses and simulated storage.
 
-### Backend Services
-- **RESTful API**: FastAPI-based backend with JWT authentication
-- **Real-time Communication**: Pub/Sub messaging between agents
-- **Data Persistence**: Firestore database for scalable data storage
-- **AI Integration**: Google Cloud AI Platform and Gemini for LLM tasks
-- **Vision Analysis**: Computer vision for crowd monitoring and incident detection
+## What runs today
 
-## 🏗️ Architecture
+| Feature | Status | Scope |
+| --- | --- | --- |
+| Still-image upload and analysis | Implemented | Signed Cloud Storage upload, image validation, Gemini findings and suggested next steps. |
+| Visible people count, density and hazard flags | Implemented | Estimates and flags for the submitted frame. Accuracy on real event footage is unmeasured. |
+| No detection, uncertainty and failure states | Implemented | Distinct UI outcomes and actionable API errors. |
+| Occupancy updates and automatic incident processing | Experimental | Opt-in Firestore write and Pub/Sub handoff. Uncertain and failed analyses skip automation. |
+| Crowd forecasting | Experimental | Dashboard calls the configured Vertex prediction endpoint. Historical series is a placeholder and feature inputs can fall back to defaults. Forecast accuracy is unmeasured. |
+| Multi-source fusion | Planned | The image analyzer processes one image per request. |
+| Video, live camera feeds and motion analysis | Planned | The supported analysis inputs are still images. |
 
-```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Frontend      │    │   Backend       │    │   AI Agents     │
-│   (React)       │◄──►│   (FastAPI)     │◄──►│   (GCP)         │
-│                 │    │                 │    │                 │
-│ • Dashboard     │    │ • REST API      │    │ • Summary       │
-│ • Maps          │    │ • JWT Auth      │    │ • Escalation    │
-│ • Incidents     │    │ • Pub/Sub       │    │ • Notification  │
-│ • Analytics     │    │ • Firestore     │    │ • Dispatcher    │
-│ • Reports       │    │ • Vision AI     │    │ • Chat          │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
+## Architecture
+
+```text
+JPEG / PNG + zone → React upload → FastAPI signs a size-bound Cloud Storage PUT
+  → FastAPI matches the upload record, checks size/type, and decodes the image in memory
+  → Vertex AI Gemini returns structured JSON → server validates the findings
+  → UI shows detected / no detection / uncertain, or an actionable analysis error
+  → optional Firestore occupancy update and Pub/Sub handoff for detected hazards
 ```
 
-## 🛠️ Technology Stack
+“No visible hazard detected” means the model returned valid findings without a positive hazard flag. “Uncertain” requests manual review and hides potentially misleading definitive flags in the UI. “Analysis failed” covers unavailable or unusable results and has its own HTTP error response. The model request has a 20-second transport timeout and at most one retry for transient failures. Malformed output fails immediately. The analyzer creates no local temporary files. A browser disconnect can leave an in-flight server request running until it finishes or times out.
 
-### Frontend
-- **React 19** with Vite for fast development
-- **Tailwind CSS** for modern, responsive styling
-- **Material-UI** components for consistent design
-- **React Router** for navigation
-- **Google Maps API** for interactive mapping
-- **Recharts** for data visualization
-- **Firebase** for real-time features
+## Run the evaluation offline
 
-### Backend
-- **FastAPI** for high-performance API
-- **Google Cloud Platform** services:
-  - **Firestore** for database
-  - **Pub/Sub** for messaging
-  - **Vertex AI** for machine learning
-  - **Cloud Vision** for image analysis
-  - **Text-to-Speech** for audio alerts
-- **JWT** for secure authentication
-- **Redis** for caching
-- **SQLAlchemy** for database ORM
+From the repository root, with Python 3.12:
 
-### AI & ML
-- **Google Gemini** for natural language processing
-- **Custom AI Agents** for specialized tasks
-- **Computer Vision** for crowd analysis
-- **Predictive Analytics** for incident forecasting
-
-## 📦 Installation & Setup
-
-### Prerequisites
-- Node.js 18+ and npm
-- Python 3.9+
-- Google Cloud Platform account
-- Firebase project
-
-### Backend Setup
-
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd Agentic-Project-Drishti/backend
-   ```
-
-2. **Create virtual environment**
-   ```bash
-   python3 -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
-
-3. **Install dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. **Configure environment variables**
-   Create a `.env` file with:
-   ```env
-   GOOGLE_CLOUD_PROJECT=your-project-id
-   JWT_SECRET=your-secret-key
-   FIREBASE_CREDENTIALS_PATH=path/to/credentials.json
-   ```
-
-5. **Set up Google Cloud services**
-   - Enable Firestore, Pub/Sub, Vertex AI, and Cloud Vision APIs
-   - Create service account and download credentials
-   - Set up Pub/Sub topics for agent communication
-
-6. **Run the backend**
-   ```bash
-   uvicorn main:app --reload --host 0.0.0.0 --port 8000
-   ```
-
-### Frontend Setup
-
-1. **Navigate to frontend directory**
-   ```bash
-   cd ../frontend
-   ```
-
-2. **Install dependencies**
-   ```bash
-   npm install
-   ```
-
-3. **Configure Firebase**
-   - Create a Firebase project
-   - Add Firebase configuration to `src/firebase.js`
-
-4. **Run the frontend**
-   ```bash
-   npm run dev
-   ```
-
-### Database Setup
-
-1. **Set up Firestore database**
-   ```bash
-   cd ../dbScript
-   npm install
-   node setupDatabase.js
-   ```
-
-2. **Initialize agent database**
-   ```bash
-   node setupAgentDatabase.js
-   ```
-
-## 🚀 Deployment
-
-### Docker Deployment
-
-1. **Backend deployment**
-   ```bash
-   cd backend
-   docker build -t drishti-backend .
-   docker run -p 8000:8000 drishti-backend
-   ```
-
-2. **Frontend deployment**
-   ```bash
-   cd frontend
-   docker build -t drishti-frontend .
-   docker run -p 3000:80 drishti-frontend
-   ```
-
-### Google Cloud Platform Deployment
-
-Use the provided deployment scripts:
 ```bash
-# Backend deployment
-./backend/deploy.sh
-
-# MCP deployment
-./backend/deploy-mcp.sh
-```
-
-## 📚 API Documentation
-
-The API documentation is available at:
-- **Swagger UI**: `http://localhost:8000/docs`
-- **ReDoc**: `http://localhost:8000/redoc`
-
-### Key Endpoints
-
-- `POST /api/login` - User authentication
-- `POST /summary` - Run situational summary agent
-- `POST /escalation` - Run emergency escalation agent
-- `POST /notification` - Run crowd notification agent
-- `POST /dispatcher` - Run response dispatcher agent
-- `POST /chat` - Interactive AI chat
-- `GET /api/incidents` - Get incident data
-- `POST /api/venues` - Venue management
-- `GET /api/zones` - Zone management
-
-## 🤖 AI Agents
-
-### Situational Summary Agent
-- Analyzes real-time crowd data
-- Generates situational awareness reports
-- Identifies potential safety concerns
-
-### Emergency Escalation Agent
-- Monitors incident severity levels
-- Automatically escalates critical situations
-- Manages response priorities
-
-### Crowd Notification Agent
-- Sends automated alerts to relevant personnel
-- Manages communication channels
-- Tracks notification delivery status
-
-### Response Dispatcher Agent
-- Allocates resources based on incident type
-- Coordinates responder assignments
-- Optimizes response times
-
-### Chat Agent
-- Provides interactive AI assistance
-- Answers queries about incidents and procedures
-- Supports natural language interaction
-
-## 🔧 Development
-
-### Project Structure
-```
-Agentic-Project-Drishti/
-├── backend/                 # FastAPI backend
-│   ├── agents/             # AI agent implementations
-│   ├── api/                # REST API endpoints
-│   ├── tools/              # Utility tools and services
-│   ├── utils/              # Helper utilities
-│   └── main.py            # Main application entry
-├── frontend/               # React frontend
-│   ├── src/
-│   │   ├── components/     # React components
-│   │   ├── pages/          # Page components
-│   │   ├── services/       # API services
-│   │   └── utils/          # Frontend utilities
-│   └── package.json
-├── dbScript/               # Database setup scripts
-└── README.md
-```
-
-### Adding New Features
-
-1. **New AI Agent**
-   - Create agent class in `backend/agents/`
-   - Implement required methods
-   - Add to agent registry
-
-2. **New API Endpoint**
-   - Create router in `backend/api/`
-   - Add to main app in `main.py`
-   - Update documentation
-
-3. **New Frontend Component**
-   - Create component in `frontend/src/components/`
-   - Add to appropriate page
-   - Update routing if needed
-
-## 🧪 Testing
-
-### Backend Testing
-```bash
+git clone https://github.com/pspcps/Agentic-Project-Drishti.git
+cd Agentic-Project-Drishti
+python3.12 -m venv .venv
+source .venv/bin/activate
+pip install -r backend/evaluation/requirements.txt
 cd backend
-python -m pytest tests/
+python -m evaluation.run
 ```
 
-### Frontend Testing
-```bash
-cd frontend
-npm test
-```
+The runner needs no credentials in its default mode. It prints each case and its elapsed time, and exits nonzero on an expectation mismatch. To regenerate the original synthetic PNGs, run `python -m evaluation.generate` from `backend/`.
 
-## 📊 Monitoring & Analytics
+| Case | Input | Outcome |
+| --- | --- | --- |
+| Clear positive | [Synthetic plaza fire](backend/evaluation/images/clear-fire.png) | Potential hazard detected |
+| Clear negative | [Empty plaza](backend/evaluation/images/empty-plaza.png) | No visible hazard detected |
+| Ambiguous | [Obscured glow](backend/evaluation/images/obscured-glow.png) | Uncertain, manual review needed |
+| Failure | Positive image with injected timeout | Analysis failed with retry or manual review guidance |
 
-- **Real-time dashboards** for incident monitoring
-- **Historical analytics** for trend analysis
-- **Performance metrics** for system optimization
-- **Alert systems** for critical events
+### Evaluation results
 
-## 🔒 Security
+The [reviewed manifest](backend/evaluation/cases.json) contains 12 cases. Six are original synthetic stills with recorded visual review notes, four exercise input validation, and two inject model failures. The scripted run matched **12/12** expectations. Median analyzer time for the six stills was **1.5 ms** on the development machine, including local image validation. The scripted timeout took about **500 ms** with the retry delay and an immediately raised timeout. These timings exclude network calls, uploads and model inference.
 
-- **JWT authentication** for API access
-- **Role-based access control** (RBAC)
-- **Secure communication** via HTTPS
-- **Data encryption** at rest and in transit
-- **Input validation** and sanitization
+For a live run, supply application credentials and set `GCP_PROJECT`, `GCP_REGION`, and optionally `DRISHTI_VISION_MODEL`, then run `python -m evaluation.run --live` from `backend/`. It submits six stills to Vertex, keeps validation and failure cases offline, and reports fire precision, recall, false positives, decision coverage and analyzer time. Five frames have binary fire labels. The ambiguous frame is scored separately for uncertainty. A positive with no usable decision lowers recall. Precision is undefined when there are no positive predictions. Individual case times expose the effect of blur and darkening.
 
-## 🤝 Contributing
+Live model metrics are **unmeasured** in the checked-in results. The set uses simple illustrations, includes a degraded derivative of a positive example, and supports a smoke test for visible fire and uncertainty. It is too small to estimate real-event performance and has no calibrated labels for smoke, crowd density, count accuracy, medical distress or crowd crush.
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+## Run the image upload API with Google Cloud
 
-## 📄 License
+The focused local API mounts the same upload and analysis routes used by the dashboard backend. Bind it to loopback for development. It has no login middleware.
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+1. Use a development Google Cloud project with billing, Vertex AI, Firestore in Native mode and a private Cloud Storage bucket. Give your application credentials access to read and write Firestore records, read and upload bucket objects, sign V4 PUT URLs and invoke Vertex. Use your own signing-capable credentials stored outside the checkout. Create `zones/demo` in Firestore with `name: "Demo plaza"`.
+2. Activate the Python environment created above, then run from `backend/`:
 
-## 🆘 Support
+   ```bash
+   pip install -r requirements-vision.txt
+   export GCP_PROJECT=your-development-project
+   export GCP_REGION=us-central1
+   export GOOGLE_APPLICATION_CREDENTIALS=/absolute/path/to/your-signing-credentials.json
+   export DRISHTI_VISION_BUCKET=your-private-image-bucket
+   export DRISHTI_VISION_MODEL=gemini-2.5-pro
+   uvicorn vision_local:app --host 127.0.0.1 --port 8000
+   ```
 
-For support and questions:
-- Create an issue in the repository
-- Contact the development team
-- Check the documentation at `/docs`
+   Select a model and location available to your project. Open the [local OpenAPI docs](http://127.0.0.1:8000/docs) to inspect the request shapes. Run `python -m unittest evaluation.test_api` with the same dependencies for HTTP regressions without cloud calls.
 
-## 🔄 Version History
+3. From `backend/` in a second terminal, upload the sample and trigger analysis with curl and jq:
 
-- **v1.0.0** - Initial release with core AI agents and dashboard
-- **v1.1.0** - Added real-time monitoring and analytics
-- **v1.2.0** - Enhanced security and multi-venue support
+   ```bash
+   sample=evaluation/images/clear-fire.png
+   size=$(wc -c < "$sample")
+   upload=$(curl --fail-with-body -sS http://127.0.0.1:8000/api/upload/presigned-url \
+     -H 'Content-Type: application/json' \
+     -d "{\"filename\":\"clear-fire.png\",\"mimetype\":\"image/png\",\"size\":$size,\"zone\":\"demo\",\"type\":\"vision\"}")
+   curl --fail-with-body -sS --upload-file "$sample" -H 'Content-Type: image/png' \
+     "$(jq -r .url <<<"$upload")"
+   jq '{fileUrl, docId, zone: "demo", autoIncident: false}' <<<"$upload" | \
+     curl --fail-with-body -sS http://127.0.0.1:8000/api/analyze-media \
+       -H 'Content-Type: application/json' --data-binary @-
+   ```
 
----
+The React client can target an authenticated Drishti backend via `VITE_API_BASE_URL` (include `/api`). Use Node.js 22.12+, run `npm ci` and `npm run dev` from `frontend/`, and set `VITE_FIREBASE_PROJECT_ID` and the other web configuration values in [firebase.js](frontend/src/firebase.js) for the development Firebase project. The bucket needs to allow signed PUTs from the frontend origin. Sign in with a development operator account and choose **Upload**. Keep automatic incident creation off for sample images.
 
-**Project Drishti** - Empowering crowd safety through intelligent AI agents and real-time monitoring.
+## Limitations and operating costs
+
+- A single frame has limited coverage. Glare, haze, motion blur and occlusion can cause missed hazards or false alarms. Counts cover visible people and can vary across runs. The model cannot verify crowd movement or diagnose distress from a still. Keep an operator in the loop.
+- Uploads and Firestore metadata are persistent application records, including uploads where analysis was canceled or failed. Configure bucket lifecycle and record retention for approved images. The bucket can remain private and its direct media link will require appropriate access.
+- Offline evaluation has no cloud charges. Live analysis bills image/prompt and output tokens per attempt, with at most two requests for a retryable failure. Multiply attempts by the configured model’s current input/output rates and add Cloud Storage operations and retention, Firestore reads/writes, optional Pub/Sub traffic and API hosting. For example, 100 images with 10 retries mean 110 model requests. Forecasting uses a separate Vertex endpoint and can incur deployment and prediction costs. [Vertex pricing](https://cloud.google.com/vertex-ai/generative-ai/pricing) · [Cloud Storage pricing](https://cloud.google.com/storage/pricing) · [Firestore pricing](https://cloud.google.com/firestore/pricing)

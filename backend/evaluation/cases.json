@@ -1,0 +1,14 @@
+[
+  {"id":"clear-fire","image":"clear-fire.png","expected":"detected","fire":true,"group":"clear","review":"Large, unobstructed orange and yellow flame shape above a dark base."},
+  {"id":"two-fires","image":"two-fires.png","expected":"detected","fire":true,"group":"clear","review":"Two separate flame shapes with unobstructed outlines."},
+  {"id":"empty-plaza","image":"empty-plaza.png","expected":"no_detection","fire":false,"group":"clear","review":"Empty foreground, no flames or people."},
+  {"id":"three-people","image":"three-people.png","expected":"no_detection","fire":false,"group":"clear","review":"Three separated standing figures. No flame or visible hazard."},
+  {"id":"dim-fire","image":"dim-fire.png","expected":"detected","fire":true,"group":"degraded","review":"Same scene as clear-fire after darkening and blur. Flame silhouette remains visible."},
+  {"id":"obscured-glow","image":"obscured-glow.png","expected":"uncertain","group":"ambiguous","review":"Only a blurred orange tip is visible above a large gray obstruction. Cause cannot be determined from visible pixels."},
+  {"id":"unsupported","expected":"unsupported_type","group":"validation","review":"Text declared as text/plain."},
+  {"id":"corrupt-png","expected":"invalid_image","group":"validation","review":"Text bytes declared as image/png."},
+  {"id":"empty","expected":"invalid_size","group":"validation","review":"Zero bytes declared as image/png."},
+  {"id":"oversized","expected":"invalid_size","group":"validation","review":"Body exceeds the 5 MiB limit by one byte."},
+  {"id":"timeout","image":"clear-fire.png","expected":"model_timeout","group":"failure","review":"Transport timeout injected on both attempts."},
+  {"id":"malformed","image":"clear-fire.png","expected":"invalid_model_response","group":"failure","review":"Incomplete model JSON injected after image validation."}
+]
