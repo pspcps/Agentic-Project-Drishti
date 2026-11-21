@@ -1,5 +1,5 @@
 // API Service for Python/FastAPI ADK Backend
-const BASE_URL = "https://gcp-crowd-agents-268678901849.us-central1.run.app/api";
+export const BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://gcp-crowd-agents-268678901849.us-central1.run.app/api";
 
 function authHeaders(extra = {}) {
   const token = localStorage.getItem('token');
@@ -139,25 +139,31 @@ export const api = {
   },
 
   // Upload: Get signed upload URL
-  getSignedUploadUrl: async ({ filename, mimetype, zone, notes = "", type = null, bucket = null }) => {
+  getSignedUploadUrl: async ({ filename, mimetype, zone, notes = "", type = null, bucket = null, size }, signal) => {
     const response = await fetch(`${BASE_URL}/upload/presigned-url`, {
       method: "POST",
       headers: authHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ filename, mimetype, zone, notes, type, bucket }),
+      body: JSON.stringify({ filename, mimetype, zone, notes, type, bucket, size }),
+      signal,
     });
     handleAuthError(response);
-    return await response.json();
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Check the image and selected zone, then try again.");
+    return data;
   },
 
   // Vision Analysis
-  analyzeMedia: async ({ fileUrl, zone, docId,autoIncident=false }) => {
+  analyzeMedia: async ({ fileUrl, zone, docId, autoIncident = false }, signal) => {
     const response = await fetch(`${BASE_URL}/analyze-media`, {
       method: "POST",
       headers: authHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ fileUrl, zone, docId, autoIncident }),
+      signal,
     });
     handleAuthError(response);
-    return await response.json();
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Check the image and selected zone, then try again.");
+    return data;
   },
 
   // Venue: Create Venue

@@ -1,0 +1,7 @@
+-r evaluation/requirements.txt
+fastapi==0.165.0
+uvicorn==0.54.0
+google-cloud-firestore==2.34.1
+google-cloud-pubsub==2.44.0
+google-cloud-storage==3.17.1
+python-dotenv==1.2.4

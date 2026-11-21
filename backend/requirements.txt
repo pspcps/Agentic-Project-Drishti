@@ -17,3 +17,4 @@ PyMySQL>=1.0
 anthropic
 aiohttp
 PyJWT
+google-genai>=1.30,<2

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react"
-import { Upload, Loader2, CheckCircle, XCircle, ArrowLeft, Camera, Video, FileText, Cloud } from "lucide-react"
+import React, { useState, useEffect, useRef } from "react"
+import { Upload, Loader2, CheckCircle, XCircle, ArrowLeft, Camera, FileText, Cloud } from "lucide-react"
 import { Link } from "react-router-dom"
 import { api } from '../services/adkApi';
 
@@ -14,8 +14,11 @@ export default function MediaUpload() {
   const [zonesLoading, setZonesLoading] = useState(false)
   const [zonesError, setZonesError] = useState("")
   const [analysisStatus, setAnalysisStatus] = useState("")
-  const [autoIncident, setAutoIncident] = useState(true);
+  const [autoIncident, setAutoIncident] = useState(false);
   const [analysisResult, setAnalysisResult] = useState(null);
+
+  const uploadRequest = useRef(null);
+  useEffect(() => () => uploadRequest.current?.abort(), []);
 
   useEffect(() => {
     const fetchZones = async () => {
@@ -55,6 +58,7 @@ export default function MediaUpload() {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
+    if (loading) return;
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       setFile(e.dataTransfer.files[0]);
     }
@@ -65,72 +69,64 @@ export default function MediaUpload() {
       setMessage({ type: "error", text: "Zone and media file are required." })
       return
     }
-    setLoading(true)
     setMessage(null)
     setAnalysisStatus("")
     setAnalysisResult(null)
+    if (!["image/jpeg", "image/png"].includes(file.type) || !/\.(jpe?g|png)$/i.test(file.name)) {
+      setMessage({ type: "error", text: "Choose a JPEG or PNG image." })
+      return
+    }
+    if (!file.size || file.size > 5 * 1024 * 1024) {
+      setMessage({ type: "error", text: "Choose a nonempty image up to 5 MiB." })
+      return
+    }
+
+    setLoading(true)
+    const controller = new AbortController()
+    uploadRequest.current = controller
+    const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(100_000)])
+    let uploaded = false
     try {
-      // Get signed URL
       const data = await api.getSignedUploadUrl({
-        filename: file.name,
-        mimetype: file.type,
-        zone,
-        notes,
-        type: '', // Always send a string
-        bucket: 'project-drishti-central1-bucket-vision',
-        autoIncident // Pass to backend if needed
-      });
-      if (!data.url) throw new Error("No upload URL returned")
-      // Upload the file directly
-      await fetch(data.url, {
+        filename: file.name, mimetype: file.type, size: file.size, zone, notes, type: "vision"
+      }, signal)
+      if (!data.url || !data.fileUrl || !data.docId) throw new Error("Upload details are missing. Try again.")
+      const response = await fetch(data.url, {
         method: "PUT",
         headers: { "Content-Type": file.type },
         body: file,
-      });
-      setMessage({ type: "success", text: "Upload successful ✅" })
-      // Automatically call vision analysis after upload
-      const fileUrl = `https://storage.googleapis.com/project-drishti-central1-bucket-vision/${data.objectPath}`
-      setAnalysisStatus("Analyzing image...")
-      try {
-        const analysisRes = await api.analyzeMedia({
-          fileUrl,
-          zone,
-          docId: data.docId, // Pass docId from upload response
-          autoIncident
-        })
-        if (analysisRes && analysisRes.success) {
-          setAnalysisResult(analysisRes);
-          setAnalysisStatus("");
-        } else {
-          setAnalysisResult(null);
-          setAnalysisStatus('Image uploaded, but analysis failed.');
-        }
-      } catch {
-        setAnalysisResult(null);
-        setAnalysisStatus('Image uploaded, but analysis failed.');
-      }
-      setZone("")
-      setNotes("")
-      setFile(null)
+        signal,
+      })
+      if (!response.ok) throw new Error("Storage rejected the upload. Try uploading the image again.")
+      uploaded = true
+      setAnalysisStatus("Analyzing image…")
+      const result = await api.analyzeMedia({
+        fileUrl: data.fileUrl, zone, docId: data.docId, autoIncident
+      }, signal)
+      if (!result?.success) throw new Error(result?.error || "Try again or review the image manually.")
+      setAnalysisResult(result)
     } catch (err) {
-      setMessage({ type: "error", text: err.message || "Upload failed. Please try again." })
+      if (!controller.signal.aborted) {
+        const reason = err.name === "TimeoutError" ? "The request timed out. Try again." : err.message
+        setMessage({ type: "error", text: `${uploaded ? "Analysis failed" : "Upload failed"}. ${reason}` })
+      }
     } finally {
-      setLoading(false)
+      if (!controller.signal.aborted) {
+        setAnalysisStatus("")
+        setLoading(false)
+      }
     }
-  };
-  
+  }
 
   const getFileIcon = () => {
     if (!file) return <Upload className="w-8 h-8 text-gray-400" />
     if (file.type.startsWith('image/')) return <Camera className="w-8 h-8 text-blue-500" />
-    if (file.type.startsWith('video/')) return <Video className="w-8 h-8 text-purple-500" />
     return <FileText className="w-8 h-8 text-gray-500" />
   }
 
   const getFileType = () => {
     if (!file) return "No file selected"
     if (file.type.startsWith('image/')) return "Image"
-    if (file.type.startsWith('video/')) return "Video"
     return "File"
   }
 
@@ -151,7 +147,7 @@ export default function MediaUpload() {
             </div>
             <div>
               <h1 className="text-3xl font-bold text-gray-900">Media Upload</h1>
-              <p className="text-gray-600">Upload photos and videos for crowd detection analysis</p>
+              <p className="text-gray-600">Analyze a still image for visible crowd and safety conditions</p>
             </div>
           </div>
         </div>
@@ -169,6 +165,7 @@ export default function MediaUpload() {
               ) : (
                 <select
                   value={zone}
+                  disabled={loading}
                   onChange={(e) => setZone(e.target.value)}
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white/50 backdrop-blur-sm"
                   required
@@ -227,8 +224,9 @@ export default function MediaUpload() {
               >
                 <input
                   type="file"
-                  accept="image/*,video/*"
+                  accept="image/jpeg,image/png,.jpg,.jpeg,.png"
                   onChange={handleFileChange}
+                  disabled={loading}
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                   required
                 />
@@ -242,7 +240,7 @@ export default function MediaUpload() {
                     </h3>
                     <p className="text-gray-600">
                       {file 
-                        ? `${getFileType()} • ${(file.size / 1024 / 1024).toFixed(2)} MB`
+                        ? `${getFileType()} • ${Math.ceil(file.size / 1024)} KiB`
                         : "or click to browse"
                       }
                     </p>
@@ -258,13 +256,13 @@ export default function MediaUpload() {
               </div>
               
               <p className="text-xs text-gray-500 mt-2">
-                Supported formats: JPG, PNG, GIF, MP4, MOV, AVI (Max 50MB)
+                JPEG or PNG, up to 5 MiB and 20 megapixels.
               </p>
             </div>
 
             {/* Message Display */}
             {message && (
-              <div
+              <div role="alert"
                 className={`flex items-center px-4 py-3 rounded-xl text-sm ${
                   message.type === "success"
                     ? "bg-green-50 text-green-800 border border-green-200"
@@ -290,22 +288,23 @@ export default function MediaUpload() {
 
             {/* Analysis Result Card */}
             {analysisResult && (
-              <div className="bg-white/90 border border-gray-200 rounded-2xl shadow-lg p-6 mt-6 max-w-2xl mx-auto">
+              <div role="status" className="bg-white/90 border border-gray-200 rounded-2xl shadow-lg p-6 mt-6 max-w-2xl mx-auto">
                 <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center">
                   <CheckCircle className="w-6 h-6 mr-2 text-green-600" />
-                  Analysis Result
+                  {{ detected: "Potential hazard detected", no_detection: "No visible hazard detected", uncertain: "Uncertain — manual review needed" }[analysisResult.status]}
                 </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                  <div><span className="font-semibold">People Detected:</span> {analysisResult.personCount}</div>
+                {analysisResult.status !== "uncertain" && <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                  <div><span className="font-semibold">Visible People (estimate):</span> {analysisResult.personCount}</div>
                   <div><span className="font-semibold">Crowd Density:</span> {analysisResult.crowdDensity}</div>
                   <div><span className="font-semibold">Smoke Detected:</span> <span className={analysisResult.smokeDetected ? 'text-red-600 font-bold' : 'text-green-700'}>{analysisResult.smokeDetected ? 'Yes' : 'No'}</span></div>
                   <div><span className="font-semibold">Fire Detected:</span> <span className={analysisResult.fireDetected ? 'text-red-600 font-bold' : 'text-green-700'}>{analysisResult.fireDetected ? 'Yes' : 'No'}</span></div>
-                  <div><span className="font-semibold">Stampede Detected:</span> <span className={analysisResult.stampedeDetected ? 'text-red-600 font-bold' : 'text-green-700'}>{analysisResult.stampedeDetected ? 'Yes' : 'No'}</span></div>
-                  <div><span className="font-semibold">Medical Emergency:</span> <span className={analysisResult.medicalEmergency ? 'text-red-600 font-bold' : 'text-green-700'}>{analysisResult.medicalEmergency ? 'Yes' : 'No'}</span></div>
+                  <div><span className="font-semibold">Possible Crowd Crush:</span> <span className={analysisResult.stampedeDetected ? 'text-red-600 font-bold' : 'text-green-700'}>{analysisResult.stampedeDetected ? 'Yes' : 'No'}</span></div>
+                  <div><span className="font-semibold">Possible Medical Distress:</span> <span className={analysisResult.medicalEmergency ? 'text-red-600 font-bold' : 'text-green-700'}>{analysisResult.medicalEmergency ? 'Yes' : 'No'}</span></div>
                   <div><span className="font-semibold">Potential Risk:</span> <span className={analysisResult.potentialRisk ? 'text-red-600 font-bold' : 'text-green-700'}>{analysisResult.potentialRisk ? 'Yes' : 'No'}</span></div>
                   <div><span className="font-semibold">Incident Recommended:</span> <span className={analysisResult.incidentRecommended ? 'text-orange-600 font-bold' : 'text-green-700'}>{analysisResult.incidentRecommended ? 'Yes' : 'No'}</span></div>
                   <div className="md:col-span-2"><span className="font-semibold">Incident Type:</span> {analysisResult.incidentType}</div>
-                </div>
+                </div>}
+                {analysisResult.automationWarning && <p role="alert">{analysisResult.automationWarning}</p>}
                 <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded mb-2">
                   <span className="font-semibold text-yellow-800">Suggested Action:</span>
                   <div className="text-gray-900 mt-1">{analysisResult.suggestedAction}</div>
@@ -334,7 +333,7 @@ export default function MediaUpload() {
                 {loading ? (
                   <>
                     <Loader2 className="w-5 h-5 animate-spin" />
-                    <span>Uploading...</span>
+                    <span>Processing…</span>
                   </>
                 ) : (
                   <>
@@ -366,10 +365,9 @@ export default function MediaUpload() {
             <div>
               <h4 className="font-medium text-gray-900 mb-2">What We Analyze:</h4>
               <ul className="space-y-1">
-                <li>• Crowd density and flow patterns</li>
-                <li>• Potential safety hazards</li>
-                <li>• Emergency exit accessibility</li>
-                <li>• Overall crowd behavior</li>
+                <li>• Estimated visible people and crowd density</li>
+                <li>• Possible smoke, fire, or other visible hazards</li>
+                <li>• Signs that warrant human review</li>
               </ul>
             </div>
           </div>
